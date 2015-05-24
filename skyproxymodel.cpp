@@ -1,6 +1,7 @@
 #include "skyproxymodel.h"
 #include "skymodel.h"
 #include <QtCore>
+#include <QTextDocument>
 
 #include "litesql.hpp"
 #include "main.hpp"
@@ -20,15 +21,11 @@ bool SkyProxyModel::filterAcceptsRow(int source_row, const QModelIndex &source_p
 {
     Q_UNUSED(source_row)
     Q_UNUSED(source_parent)
-//    const QModelIndex ind = sourceModel()->index(source_row, 0, source_parent);
+    const QModelIndex ind = sourceModel()->index(source_row, 0, source_parent);
 
-//    QString name_data = ind.data(Qt::UserRole + 1).toString();
-//    QString code_data = ind.data(Qt::UserRole + 1).toString();
+    QString name_data = ind.data(Qt::UserRole).toString();
 
-//    bool accept = name_data.contains(filterRegExp())
-//            || code_data.contains(filterRegExp());
-    bool accept = true;
-
+    bool accept = name_data.contains(filterRegExp());
     return accept;
 }
 
@@ -80,18 +77,23 @@ void SkyProxyModel::loadTest() {
 
 void SkyProxyModel::loadSkypeTest() {
     try {
-        SkypeDB::main db("sqlite3", "database=/home/ilia/.Skype/sc.ryabokon.ilia/main.db");
+        SkypeDB::main db("sqlite3", "database=/home/ilia/.Skype/luxa_ryabic/main.db");
         // create tables, sequences and indexes
         db.verbose = true;
-        auto ds = select<Messages>(db, Messages::Id > 100 && Messages::Id < 200);
-        std::cout << "All messages count " << ds.count() << std::endl;
+        auto ds = select<Messages>(db);
+        for (Messages message: ds.all()) {
+            QString body = QString::fromStdString(message.body_xml);
+            QTextDocument doc(body);
+            QFont fnt = doc.defaultFont();
+            fnt.setPointSize(10);
+            doc.setDefaultFont(fnt);
+            doc.adjustSize();
+            QVariantMap m;
+            m["Name"] = doc.toPlainText();
+            m["Height"] = doc.size().height();
+            model_impl()->append(m);
+        }
     } catch (Except e) {
         std::cerr << "Error: " << e << std::endl;
-    }
-    QStringList l = QString("Psycho,Lever,Mace,Green").split(",");
-    for (int i = 0; i < 4; i++) {
-        QVariantMap m;
-        m["Name"] = l.at(i);
-        model_impl()->append(m);
     }
 }

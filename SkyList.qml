@@ -1,36 +1,45 @@
 import QtQuick 2.0
 
 Rectangle {
-    width: 100
-    height: 62
+    id: container
+    anchors.fill: parent
+    signal textChanged(string text)
+
+    function filter(text) {
+        sky_model.stringChanged(text)
+    }
 
     ListView {
-        id: listView1
+        id: sky_view
         anchors.fill: parent
         model: sky_model
         delegate: Item {
             x: 5
-            width: 80
-            height: 40
+            width: sky_view.width
+            height: Height
             Row {
+                height: parent.height
                 id: row1
                 Rectangle {
-                    width: 40
-                    height: 40
-                    color: "#ddd"
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 4
+                    height: parent.height - 4
+                    color: index % 2 == 0 ? "#E61875" : "#03A9F4"
                 }
 
                 Text {
+                    renderType: Text.NativeRendering
                     text: Name
                     anchors.verticalCenter: parent.verticalCenter
-                    font.bold: true
+                    font.bold: false
+                    font.pointSize: 10
                 }
                 spacing: 10
             }
         }
 
         Component.onCompleted: {
-            sky_model.loadTest()
+            sky_model.loadSkypeTest()
         }
     }
 }
