@@ -9,12 +9,63 @@
 using namespace litesql;
 using namespace SkypeDB;
 
+void SkyDataLoader::process_msg(const QVariantMap &msg){
+    try {
+        SkypeDB::main db("sqlite3", "database=/home/ilia/.Skype/luxa_ryabic/main.db");
+        // create tables, sequences and indexes
+        db.verbose = false;
+        QDateTime dt = QDateTime::currentDateTime();
+        auto ds = litesql::select<Messages>(db);
+        dt = QDateTime::currentDateTime();
+        int count = ds.count();
+        const int step = 500;
+        for (int i = 0; i < count; i+=step) {
+            QString expr = QString("OID >= %1 AND OID < %2").arg(i).arg(i + step);
+            auto ds = select<Messages>(db, RawExpr(expr.toLocal8Bit().data()));
+            for (Messages message: ds.all()) {
+                QString body = QString::fromStdString(message.body_xml);
+                QTextDocument doc(body);
+                QFont fnt = doc.defaultFont();
+                fnt.setPointSize(10);
+                doc.setDefaultFont(fnt);
+                doc.adjustSize();
+                QVariantMap m;
+                m["Name"] = doc.toPlainText();
+                m["Height"] = doc.size().height();
+                //
+                int offset = 9;
+                double status_move = i << offset;
+                double percentage = status_move / count;
+                int status_res = static_cast<int>(percentage * 100) >> offset;
+                m["Percent"] = status_res;
+
+                emit send_msg(m);
+            }
+        }
+        emit send_finished();
+
+    } catch (Except e) {
+        std::cerr << "Error: " << e << std::endl;
+    }
+}
+
 SkyProxyModel::SkyProxyModel(QObject *parent)
     :QSortFilterProxyModel(parent)
 {
     setSourceModel(new SkyModel);
 //    sort(0);
     setFilterCaseSensitivity(Qt::CaseInsensitive);
+    SkyDataLoader *skLoader = new SkyDataLoader();
+    skLoader->moveToThread(&m_worker);
+    connect(&m_worker, &QThread::finished, skLoader, &QObject::deleteLater);
+    connect(this, SIGNAL(instigateLoad(QVariantMap)), skLoader, SLOT(process_msg(QVariantMap)));
+    connect(skLoader, &SkyDataLoader::send_msg, this, &SkyProxyModel::handleLoadedData);
+    connect(skLoader, &SkyDataLoader::send_finished, this, &SkyProxyModel::loadFinished);
+    m_worker.start();
+}
+SkyProxyModel::~SkyProxyModel() {
+    m_worker.quit();
+    m_worker.wait();
 }
 
 bool SkyProxyModel::filterAcceptsRow(int source_row, const QModelIndex &source_parent) const
@@ -76,24 +127,11 @@ void SkyProxyModel::loadTest() {
 }
 
 void SkyProxyModel::loadSkypeTest() {
-    try {
-        SkypeDB::main db("sqlite3", "database=/home/ilia/.Skype/luxa_ryabic/main.db");
-        // create tables, sequences and indexes
-        db.verbose = true;
-        auto ds = select<Messages>(db);
-        for (Messages message: ds.all()) {
-            QString body = QString::fromStdString(message.body_xml);
-            QTextDocument doc(body);
-            QFont fnt = doc.defaultFont();
-            fnt.setPointSize(10);
-            doc.setDefaultFont(fnt);
-            doc.adjustSize();
-            QVariantMap m;
-            m["Name"] = doc.toPlainText();
-            m["Height"] = doc.size().height();
-            model_impl()->append(m);
-        }
-    } catch (Except e) {
-        std::cerr << "Error: " << e << std::endl;
-    }
+    Q_EMIT instigateLoad(QVariantMap());
+}
+
+void SkyProxyModel::handleLoadedData(const QVariantMap &msg) {
+    model_impl()->append(msg);
+    m_progress = msg.value("Percent").toInt();
+    emit loadProgressChanged();
 }

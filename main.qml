@@ -44,6 +44,22 @@ ApplicationWindow {
 
     }
 
+    ProgressBarCustom {
+        id: progress_bar
+
+        y: search_field.height
+        width: parent.width
+        height: 2
+        value: sky_model.loadProgress
+
+        Connections {
+            target: sky_model
+            onLoadFinished: {
+                progress_bar.visible = false
+            }
+        }
+    }
+
     SkyList {
         id: sky_list
         function text_changed(text) {
