@@ -14,9 +14,10 @@ void SkyDataLoader::process_msg(const QVariantMap &msg){
         SkypeDB::main db("sqlite3", "database=/home/ilia/.Skype/luxa_ryabic/main.db");
         // create tables, sequences and indexes
         db.verbose = false;
-        QDateTime dt = QDateTime::currentDateTime();
+        auto dsch = litesql::select<Chats>(db);
+        qDebug() << "Chats count" << dsch.count();
+
         auto ds = litesql::select<Messages>(db);
-        dt = QDateTime::currentDateTime();
         int count = ds.count();
         const int step = 500;
         for (int i = 0; i < count; i+=step) {
