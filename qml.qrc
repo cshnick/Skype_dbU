@@ -3,5 +3,6 @@
         <file>main.qml</file>
         <file>SkyList.qml</file>
         <file>ProgressBarCustom.qml</file>
+        <file>Test.qml</file>
     </qresource>
 </RCC>

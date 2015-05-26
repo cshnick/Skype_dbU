@@ -2,7 +2,11 @@
 #include <QtGui>
 
 static std::vector<QString>g_roles = {"Name",
-                                      "Height"};
+                                      "Height",
+                                      "Timestamp",
+                                      "Author",
+                                      "Chatname"
+                                     };
 
 class SkyModelPrivate {
     friend class SkyModel;

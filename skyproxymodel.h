@@ -14,6 +14,10 @@ public:
     Q_SLOT void process_msg(const QVariantMap &msg);
     Q_SIGNAL void send_msg(const QVariantMap &msg);
     Q_SIGNAL void send_finished();
+
+private:
+    void allMessages(const QVariantMap &msg);
+    void chatMessages(const QVariantMap &msg);
 };
 
 class SkyProxyModel : public QSortFilterProxyModel

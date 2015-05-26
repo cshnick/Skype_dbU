@@ -2,6 +2,9 @@
 #include "skymodel.h"
 #include <QtCore>
 #include <QTextDocument>
+#include <QFontMetrics>
+#include <QRect>
+#include <QtGui>
 
 #include "litesql.hpp"
 #include "main.hpp"
@@ -10,15 +13,21 @@ using namespace litesql;
 using namespace SkypeDB;
 
 void SkyDataLoader::process_msg(const QVariantMap &msg){
+    chatMessages(msg);
+}
+
+void SkyDataLoader::allMessages(const QVariantMap &) {
     try {
-        SkypeDB::main db("sqlite3", "database=/home/ilia/.Skype/luxa_ryabic/main.db");
+        SkypeDB::main db("sqlite3", "database=/home/ilia/.Skype/sc.ryabokon.ilia/main.db");
         // create tables, sequences and indexes
         db.verbose = false;
-        auto dsch = litesql::select<Chats>(db);
-        qDebug() << "Chats count" << dsch.count();
 
-        auto ds = litesql::select<Messages>(db);
-        int count = ds.count();
+        //Calculate max id
+        SelectQuery q;
+        q.result("max(id)");
+        q.source(SkypeDB::Messages::table__);
+        int count = atoi(db.query(q)[0][0]);
+
         const int step = 500;
         for (int i = 0; i < count; i+=step) {
             QString expr = QString("OID >= %1 AND OID < %2").arg(i).arg(i + step);
@@ -30,17 +39,83 @@ void SkyDataLoader::process_msg(const QVariantMap &msg){
                 fnt.setPointSize(10);
                 doc.setDefaultFont(fnt);
                 doc.adjustSize();
+                QFontMetrics metrx(fnt);
+                int ofs = metrx.boundingRect("H").height();
+
+
                 QVariantMap m;
                 m["Name"] = doc.toPlainText();
-                m["Height"] = doc.size().height();
+                m["Height"] = doc.size().height() + ofs;
                 //
                 int offset = 9;
                 double status_move = i << offset;
                 double percentage = status_move / count;
                 int status_res = static_cast<int>(percentage * 100) >> offset;
                 m["Percent"] = status_res;
+                m["Timestamp"] = QDateTime::fromTime_t(message.timestamp).toString();
+                m["Author"] = QString::fromStdString(message.author);
 
                 emit send_msg(m);
+            }
+        }
+        emit send_finished();
+
+    } catch (Except e) {
+        std::cerr << "Error: " << e << std::endl;
+    }
+}
+
+void SkyDataLoader::chatMessages(const QVariantMap &) {
+    try {
+        SkypeDB::main db("sqlite3", "database=/home/ilia/.Skype/sc.ryabokon.ilia/main.db");
+        // create tables, sequences and indexes
+        db.verbose = true;
+        auto dsch = litesql::select<Chats>(db);
+        qDebug() << "Chats count" << dsch.count();
+
+        auto chatsDS = litesql::select<Chats>(db);
+        int chatsCount = chatsDS.count();
+        auto chatsCursor = chatsDS.cursor();
+
+        int progress_counter = 0;
+        for (;chatsCursor.rowsLeft();chatsCursor++) {
+            Chats chat = *chatsCursor;
+            std::string display_name = chat.friendlyname;
+            std::string chat_name = chat.name;
+            qDebug() << "Friendly name" << chat_name.c_str();
+
+            auto chatMessagesDS = select<Messages>(db, Messages::Chatname == chat_name);
+            qDebug() << "chm count " <<  chatMessagesDS.count();
+            auto chatMessagesCursor = chatMessagesDS.cursor();
+
+
+            for (;chatMessagesCursor.rowsLeft();chatMessagesCursor++) {
+                Messages message = *chatMessagesCursor;
+
+                QString body = QString::fromStdString(message.body_xml);
+                QTextDocument doc(body);
+                QFont fnt = doc.defaultFont();
+                fnt.setPointSize(10);
+                doc.setDefaultFont(fnt);
+                doc.adjustSize();
+                QFontMetrics metrx(fnt);
+                int ofs = metrx.boundingRect("H").height();
+
+                QVariantMap m;
+                m["Name"] = doc.toPlainText();
+                m["Height"] = doc.size().height() + ofs;
+                //
+                int offset = 9;
+                double status_move = progress_counter << offset;
+                double percentage = status_move / chatsCount;
+                int status_res = static_cast<int>(percentage * 100) >> offset;
+                m["Percent"] = status_res;
+                m["Timestamp"] = QDateTime::fromTime_t(message.timestamp).toString();
+                m["Author"] = QString::fromStdString(message.author);
+                m["Chatname"] = QString::fromStdString(display_name);
+
+                emit send_msg(m);
+                progress_counter ++;
             }
         }
         emit send_finished();
@@ -76,8 +151,10 @@ bool SkyProxyModel::filterAcceptsRow(int source_row, const QModelIndex &source_p
     const QModelIndex ind = sourceModel()->index(source_row, 0, source_parent);
 
     QString name_data = ind.data(Qt::UserRole).toString();
+    QString author = ind.data(Qt::UserRole + 3).toString();
 
-    bool accept = name_data.contains(filterRegExp());
+    bool accept = name_data.contains(filterRegExp()) ||
+            author.contains(filterRegExp());
     return accept;
 }
 

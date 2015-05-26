@@ -6,19 +6,42 @@ Rectangle {
     signal textChanged(string text)
 
     function filter(text) {
-        sky_model.stringChanged(text)
+        if (text.length > 2) {
+            sky_model.stringChanged(text)
+        }
     }
 
     ListView {
         id: sky_view
         anchors.fill: parent
+        width: parent.width
         model: sky_model
+        highlight: Rectangle { color: "lightsteelblue"; radius: 0 }
+        highlightMoveDuration : 50
+        highlightMoveVelocity : 200
         delegate: Item {
             x: 5
             width: sky_view.width
             height: Height
+
+            Text {
+                id: author
+
+                anchors.left: parent.left
+                anchors.top: parent.top
+
+                color: "#333"
+                renderType: Text.NativeRendering
+                text: Author + " (" + Chatname + ")"
+                horizontalAlignment: Text.AlignLeft
+                verticalAlignment: Text.AlignTop
+                font.pointSize: 8
+                font.bold: true
+            }
+
             Row {
-                height: parent.height
+                y: author.height
+                height: parent.height - author.height
                 id: row1
                 Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
@@ -34,8 +57,33 @@ Rectangle {
                     font.bold: false
                     font.pointSize: 10
                 }
+
                 spacing: 10
             }
+            Text {
+                id: time_stamp
+
+                anchors.right: parent.right
+                anchors.rightMargin: 20
+                anchors.bottom: parent.bottom
+
+                color: "#777"
+                renderType: Text.NativeRendering
+                text: Timestamp
+                horizontalAlignment: Text.AlignRight
+                verticalAlignment: Text.AlignBottom
+                font.pointSize: 8
+                font.bold: false
+            }
+
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: {
+                    sky_view.currentIndex = index
+                }
+            }
+
         }
 
         Component.onCompleted: {
