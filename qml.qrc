@@ -4,5 +4,6 @@
         <file>SkyList.qml</file>
         <file>ProgressBarCustom.qml</file>
         <file>Test.qml</file>
+        <file>logoskype.svg</file>
     </qresource>
 </RCC>

@@ -63,7 +63,6 @@ ApplicationWindow {
     SkyList {
         id: sky_list
         function text_changed(text) {
-            console.log("New text " + text)
             filter(text)
         }
 

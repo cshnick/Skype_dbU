@@ -19,6 +19,30 @@ Rectangle {
         highlight: Rectangle { color: "lightsteelblue"; radius: 0 }
         highlightMoveDuration : 50
         highlightMoveVelocity : 200
+
+        section.property: "Chatname"
+        section.criteria: ViewSection.FullString
+        section.delegate: Rectangle {
+            width: container.width
+            height: 30
+            color: "transparent"
+
+            Rectangle {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width - 80
+                height: 1
+                color: "#aaa"
+            }
+
+            Text {
+                renderType: Text.NativeRendering
+                text: section
+                font.bold: true
+                font.pointSize: 11
+                anchors.centerIn: parent
+            }
+        }
+
         delegate: Item {
             x: 5
             width: sky_view.width
@@ -32,7 +56,7 @@ Rectangle {
 
                 color: "#333"
                 renderType: Text.NativeRendering
-                text: Author + " (" + Chatname + ")"
+                text: Author
                 horizontalAlignment: Text.AlignLeft
                 verticalAlignment: Text.AlignTop
                 font.pointSize: 8
@@ -43,6 +67,7 @@ Rectangle {
                 y: author.height
                 height: parent.height - author.height
                 id: row1
+
                 Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 4

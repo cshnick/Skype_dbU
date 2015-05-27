@@ -2,7 +2,10 @@
 #define SKYPROXYMODEL_H
 
 #include <QSortFilterProxyModel>
+#include <QFileSystemWatcher>
 #include <QThread>
+#include <QMutex>
+#include "main.hpp"
 
 class SkyModel;
 
@@ -12,12 +15,16 @@ class SkyDataLoader : public QObject
 
 public:
     Q_SLOT void process_msg(const QVariantMap &msg);
+    Q_SLOT void processNewMsg(const QVariantMap &msg);
     Q_SIGNAL void send_msg(const QVariantMap &msg);
-    Q_SIGNAL void send_finished();
+    Q_SIGNAL void send_finished(const QVariantMap &msg);
 
 private:
     void allMessages(const QVariantMap &msg);
     void chatMessages(const QVariantMap &msg);
+    void MessagesDataSources(const QVariantMap &msg);
+    void calcMessagesFromToId(int from, int to, SkypeDB::main &db);
+
 };
 
 class SkyProxyModel : public QSortFilterProxyModel
@@ -28,6 +35,8 @@ class SkyProxyModel : public QSortFilterProxyModel
 public:
     explicit SkyProxyModel(QObject *parent = 0);
     ~SkyProxyModel();
+
+    static QString s_dbPath;
 
     int loadProgress() const {return m_progress;}
     void setLoadProgress(int val) {m_progress = val;}
@@ -45,7 +54,11 @@ public:
     Q_SIGNAL void instigateLoad(const QVariantMap &msg);
     Q_SIGNAL void loadProgressChanged();
     Q_SIGNAL void loadFinished();
+    Q_SIGNAL void checkNewMessages(const QVariantMap &msg);
     Q_SLOT void handleLoadedData(const QVariantMap &msg);
+    Q_SLOT void startWatcher();
+    Q_SLOT void processChangedFile(const QString &fileName);
+    Q_SLOT void processLoadFinished(const QVariantMap &msg);
 
 protected:
     bool filterAcceptsRow(int source_row, const QModelIndex &source_parent) const;
@@ -59,7 +72,10 @@ private:
         return reinterpret_cast<SkyModel*> (this->sourceModel());
     }
     QThread m_worker;
+    QMutex m_mutex;
+    QFileSystemWatcher m_watcher;
     int m_progress = 0;
+    int m_maxId = -1;
 };
 
 #endif // SKYPROXYMODEL_H
