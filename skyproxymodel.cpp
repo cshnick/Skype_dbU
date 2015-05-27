@@ -12,15 +12,21 @@
 using namespace litesql;
 using namespace SkypeDB;
 
-QString SkyProxyModel::s_dbPath = "/home/ilia/.Skype/sc.ryabokon.ilia/main.db";
+QString SkyProxyModel::s_dbPath = "/home/ilia/.Skype/luxa_ryabic/main.db";
+
+SkyDataLoader::SkyDataLoader()
+{
+    QString dbPath = QString("database=%1").arg(SkyProxyModel::s_dbPath);
+    m_db.reset(new SkypeDB::main("sqlite3", dbPath.toStdString()));
+}
 
 void SkyDataLoader::process_msg(const QVariantMap &msg){
     allMessages(msg);
 }
 
-void SkyDataLoader::calcMessagesFromToId(int from, int to, SkypeDB::main &db) {
+void SkyDataLoader::calcMessagesFromToId(int from, int to) {
     QHash<QString, QString>chats_hash;
-    auto cursor = select<Chats>(db).cursor();
+    auto cursor = select<Chats>(*m_db).cursor();
     for (;cursor.rowsLeft();cursor++) {
         Chats ch = *cursor;
         chats_hash[QString::fromStdString(ch.name)] = QString::fromStdString(ch.friendlyname);
@@ -28,8 +34,8 @@ void SkyDataLoader::calcMessagesFromToId(int from, int to, SkypeDB::main &db) {
 
     const int step = 500;
     for (int i = from; i >= to; i-=step) {
-        QString expr = QString("OID >= %1 AND OID < %2").arg(i).arg(i + step);
-        auto ds = select<Messages>(db, RawExpr(expr.toLocal8Bit().data())).orderBy(Messages::Timestamp, false);
+        QString expr = QString("OID >= %1 AND OID < %2").arg(i - step).arg(i);
+        auto ds = select<Messages>(*m_db, RawExpr(expr.toLocal8Bit().data())).orderBy(Messages::Timestamp, false);
         for (Messages message: ds.all()) {
             QString body = QString::fromStdString(message.body_xml);
             QTextDocument doc(body);
@@ -64,17 +70,17 @@ void SkyDataLoader::calcMessagesFromToId(int from, int to, SkypeDB::main &db) {
 
 void SkyDataLoader::allMessages(const QVariantMap &) {
     try {
-        QString dbPath = QString("database=%1").arg(SkyProxyModel::s_dbPath);
-        SkypeDB::main db("sqlite3", dbPath.toStdString());
+
         // create tables, sequences and indexes
-        db.verbose = false;
+        m_db->verbose = false;
 
         //Calculate max id
         SelectQuery q;
         q.result("max(id)");
         q.source(SkypeDB::Messages::table__);
-        int count = atoi(db.query(q)[0][0]);
-        calcMessagesFromToId(count, 0, db);
+        int count = atoi(m_db->query(q)[0][0]);
+        calcMessagesFromToId(count, 0);
+        Q_EMIT can_start_watcher();
     } catch (Except e) {
         std::cerr << "Error: " << e << std::endl;
     }
@@ -92,25 +98,24 @@ void SkyDataLoader::MessagesDataSources(const QVariantMap &) {
 }
 
 void SkyDataLoader::processNewMsg(const QVariantMap &msg) {
-//    qDebug() << "Process new msg";
-//    int maxId = msg.value("maxId").toInt();
-//    if (maxId <= 0) {
-//        return;
-//    }
-//    SkypeDB::main db("sqlite3", "database=/home/ilia/.Skype/sc.ryabokon.ilia/main.db");
-//    //Calculate max id
-//    SelectQuery q;
-//    q.result("max(id)");
-//    q.source(SkypeDB::Messages::table__);
-//    int maxIdDb = atoi(db.query(q)[0][0]);
-//    if (maxId == maxIdDb) { //Nothing new
-//        return;
-//    }
-//    qDebug() << "Maybe really new msg";
-//    calcMessagesFromToId(maxIdDb, maxId, db);
-//    QVariantMap m;
-//    m["max_id"] = maxIdDb;
-//    emit send_finished(m);
+    qDebug() << "Process new msg";
+    int maxId = msg.value("maxId").toInt();
+    if (maxId <= 0) {
+        return;
+    }
+    //Calculate max id
+    SelectQuery q;
+    q.result("max(id)");
+    q.source(SkypeDB::Messages::table__);
+    int maxIdDb = atoi(m_db->query(q)[0][0]);
+    if (maxId == maxIdDb) { //Nothing new
+        return;
+    }
+    qDebug() << "Maybe really new msg";
+    calcMessagesFromToId(maxIdDb, maxId);
+    QVariantMap m;
+    m["max_id"] = maxIdDb;
+    emit send_finished(m);
 }
 
 SkyProxyModel::SkyProxyModel(QObject *parent)
@@ -125,7 +130,7 @@ SkyProxyModel::SkyProxyModel(QObject *parent)
     connect(this, SIGNAL(instigateLoad(QVariantMap)), skLoader, SLOT(process_msg(QVariantMap)));
     connect(skLoader, &SkyDataLoader::send_msg, this, &SkyProxyModel::handleLoadedData);
     connect(skLoader, &SkyDataLoader::send_finished, this, &SkyProxyModel::loadFinished);
-    connect(skLoader, &SkyDataLoader::send_finished, this, &SkyProxyModel::startWatcher);
+    connect(skLoader, &SkyDataLoader::can_start_watcher, this, &SkyProxyModel::startWatcher);
     connect(skLoader, &SkyDataLoader::send_finished, this, &SkyProxyModel::processLoadFinished);
     connect(this, &SkyProxyModel::checkNewMessages, skLoader, &SkyDataLoader::processNewMsg);
     m_worker.start();
@@ -220,8 +225,9 @@ void SkyProxyModel::processChangedFile(const QString &) {
 
 void SkyProxyModel::processLoadFinished(const QVariantMap &msg) {
     if (m_maxId == -1 && msg.contains("maxId")) {
-        m_mutex.lock();
-        m_maxId = msg.value("maxId").toInt();
-        m_mutex.unlock();
+        if (m_mutex.tryLock()) {
+            m_maxId = msg.value("maxId").toInt();
+            m_mutex.unlock();
+        }
     }
 }
