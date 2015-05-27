@@ -18,6 +18,7 @@ SkyDataLoader::SkyDataLoader()
 {
     QString dbPath = QString("database=%1").arg(SkyProxyModel::s_dbPath);
     m_db.reset(new SkypeDB::main("sqlite3", dbPath.toStdString()));
+    m_db->verbose = true;
 }
 
 void SkyDataLoader::process_msg(const QVariantMap &msg){
@@ -34,7 +35,7 @@ void SkyDataLoader::calcMessagesFromToId(int from, int to) {
 
     const int step = 500;
     for (int i = from; i >= to; i-=step) {
-        QString expr = QString("OID >= %1 AND OID < %2").arg(i - step).arg(i);
+        QString expr = QString("OID > %1 AND OID <= %2").arg(std::max(i - step, to)).arg(i);
         auto ds = select<Messages>(*m_db, RawExpr(expr.toLocal8Bit().data())).orderBy(Messages::Timestamp, false);
         for (Messages message: ds.all()) {
             QString body = QString::fromStdString(message.body_xml);
@@ -70,10 +71,6 @@ void SkyDataLoader::calcMessagesFromToId(int from, int to) {
 
 void SkyDataLoader::allMessages(const QVariantMap &) {
     try {
-
-        // create tables, sequences and indexes
-        m_db->verbose = false;
-
         //Calculate max id
         SelectQuery q;
         q.result("max(id)");
@@ -224,7 +221,7 @@ void SkyProxyModel::processChangedFile(const QString &) {
 }
 
 void SkyProxyModel::processLoadFinished(const QVariantMap &msg) {
-    if (m_maxId == -1 && msg.contains("maxId")) {
+    if (m_maxId == -1 || msg.contains("maxId")) {
         if (m_mutex.tryLock()) {
             m_maxId = msg.value("maxId").toInt();
             m_mutex.unlock();
