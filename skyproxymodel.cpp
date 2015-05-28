@@ -25,7 +25,7 @@ void SkyDataLoader::process_msg(const QVariantMap &msg){
     allMessages(msg);
 }
 
-void SkyDataLoader::calcMessagesFromToId(int from, int to) {
+void SkyDataLoader::calcMessagesFromToIdDESC(int from, int to) {
     QHash<QString, QString>chats_hash;
     auto cursor = select<Chats>(*m_db).cursor();
     for (;cursor.rowsLeft();cursor++) {
@@ -69,6 +69,50 @@ void SkyDataLoader::calcMessagesFromToId(int from, int to) {
     emit send_finished(m_finished);
 }
 
+void SkyDataLoader::calcMessagesFromToIdASC(int from, int to) {
+    QHash<QString, QString>chats_hash;
+    auto cursor = select<Chats>(*m_db).cursor();
+    for (;cursor.rowsLeft();cursor++) {
+        Chats ch = *cursor;
+        chats_hash[QString::fromStdString(ch.name)] = QString::fromStdString(ch.friendlyname);
+    }
+
+    const int step = 500;
+    for (int i = 0; i <= to; i+=step) {
+        QString expr = QString("OID > %1 AND OID <= %2").arg(i).arg(std::min(i + step, to));
+        auto ds = select<Messages>(*m_db, RawExpr(expr.toLocal8Bit().data())).orderBy(Messages::Timestamp, true);
+        for (Messages message: ds.all()) {
+            QString body = QString::fromStdString(message.body_xml);
+            QTextDocument doc(body);
+            QFont fnt = doc.defaultFont();
+            fnt.setPointSize(10);
+            doc.setDefaultFont(fnt);
+            doc.adjustSize();
+            QFontMetrics metrx(fnt);
+            int ofs = metrx.boundingRect("H").height();
+
+
+            QVariantMap m;
+            m["Name"] = doc.toPlainText();
+            m["Height"] = doc.size().height() + ofs;
+            //
+            int offset = 9;
+            double status_move = (i) << offset;
+            double percentage = status_move / from;
+            int status_res = static_cast<int>(percentage * 100) >> offset;
+            m["Percent"] = status_res;
+            m["Timestamp"] = QDateTime::fromTime_t(message.timestamp).toString();
+            m["Author"] = QString::fromStdString(message.author);
+            m["Chatname"] = chats_hash.value(QString::fromStdString(message.chatname));
+
+            Q_EMIT prepend_msg(m);
+        }
+    }
+    QVariantMap m_finished;
+    m_finished["maxId"] = from;
+    emit send_finished(m_finished);
+}
+
 void SkyDataLoader::allMessages(const QVariantMap &) {
     try {
         //Calculate max id
@@ -76,7 +120,7 @@ void SkyDataLoader::allMessages(const QVariantMap &) {
         q.result("max(id)");
         q.source(SkypeDB::Messages::table__);
         int count = atoi(m_db->query(q)[0][0]);
-        calcMessagesFromToId(count, 0);
+        calcMessagesFromToIdDESC(count, 0);
         Q_EMIT can_start_watcher();
     } catch (Except e) {
         std::cerr << "Error: " << e << std::endl;
@@ -109,11 +153,10 @@ void SkyDataLoader::processNewMsg(const QVariantMap &msg) {
         return;
     }
     qDebug() << "Maybe really new msg";
-    calcMessagesFromToId(maxIdDb, maxId);
+    calcMessagesFromToIdASC(maxIdDb, maxId);
     QVariantMap m;
     m["max_id"] = maxIdDb;
-    emit send_finished(m);
-}
+ }
 
 SkyProxyModel::SkyProxyModel(QObject *parent)
     :QSortFilterProxyModel(parent)
@@ -126,6 +169,7 @@ SkyProxyModel::SkyProxyModel(QObject *parent)
     connect(&m_worker, &QThread::finished, skLoader, &QObject::deleteLater);
     connect(this, SIGNAL(instigateLoad(QVariantMap)), skLoader, SLOT(process_msg(QVariantMap)));
     connect(skLoader, &SkyDataLoader::send_msg, this, &SkyProxyModel::handleLoadedData);
+    connect(skLoader, &SkyDataLoader::prepend_msg, this, &SkyProxyModel::handlePrependMsg);
     connect(skLoader, &SkyDataLoader::send_finished, this, &SkyProxyModel::loadFinished);
     connect(skLoader, &SkyDataLoader::can_start_watcher, this, &SkyProxyModel::startWatcher);
     connect(skLoader, &SkyDataLoader::send_finished, this, &SkyProxyModel::processLoadFinished);
@@ -205,6 +249,12 @@ void SkyProxyModel::handleLoadedData(const QVariantMap &msg) {
     model_impl()->append(msg);
     m_progress = msg.value("Percent").toInt();
     emit loadProgressChanged();
+}
+
+void SkyProxyModel::handlePrependMsg(const QVariantMap &msg) {
+    int newIndex = msg.value("maxId").toInt();
+    __sync_lock_test_and_set(&m_maxId, newIndex);
+    model_impl()->insert(0, msg);
 }
 
 void SkyProxyModel::startWatcher() {

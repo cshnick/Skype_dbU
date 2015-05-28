@@ -98,6 +98,10 @@ void SkyModel::append(const QVariantMap &p_data) {
     p->append(p_data);
 }
 
+void SkyModel::insert(int index, const QVariantMap &p_data) {
+    p->insert(index, p_data);
+}
+
 
 QHash<int, QByteArray> SkyModel::roleNames() const {
     return p->roleNames();

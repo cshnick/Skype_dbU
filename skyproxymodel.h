@@ -23,6 +23,7 @@ public:
     Q_SLOT void process_msg(const QVariantMap &msg);
     Q_SLOT void processNewMsg(const QVariantMap &msg);
     Q_SIGNAL void send_msg(const QVariantMap &msg);
+    Q_SIGNAL void prepend_msg(const QVariantMap &msg);
     Q_SIGNAL void send_finished(const QVariantMap &msg);
     Q_SIGNAL void can_start_watcher();
 
@@ -30,7 +31,8 @@ private:
     void allMessages(const QVariantMap &msg);
     void chatMessages(const QVariantMap &msg);
     void MessagesDataSources(const QVariantMap &msg);
-    void calcMessagesFromToId(int from, int to);
+    void calcMessagesFromToIdDESC(int from, int to);
+    void calcMessagesFromToIdASC(int from, int to);
 
 private:
     int m_state = 0; //0 - idle; 1 - running
@@ -66,6 +68,7 @@ public:
     Q_SIGNAL void loadFinished();
     Q_SIGNAL void checkNewMessages(const QVariantMap &msg);
     Q_SLOT void handleLoadedData(const QVariantMap &msg);
+    Q_SLOT void handlePrependMsg(const QVariantMap &msg);
     Q_SLOT void startWatcher();
     Q_SLOT void processChangedFile(const QString &fileName);
     Q_SLOT void processLoadFinished(const QVariantMap &msg);

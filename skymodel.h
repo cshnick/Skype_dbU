@@ -14,6 +14,7 @@ public:
     QVariant data(const QModelIndex &index, int role) const;
 
     void append(const QVariantMap &p_data);
+    void insert(int index, const QVariantMap &p_data);
 
 protected:
     QHash<int, QByteArray> roleNames() const;
