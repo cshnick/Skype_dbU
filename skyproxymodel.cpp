@@ -12,7 +12,7 @@
 using namespace litesql;
 using namespace SkypeDB;
 
-QString SkyProxyModel::s_dbPath = "/home/ilia/.Skype/luxa_ryabic/main.db";
+QString SkyProxyModel::s_dbPath = "/home/ilia/.Skype/sc.ryabokon.ilia/main.db";
 
 SkyDataLoader::SkyDataLoader()
 {
@@ -78,7 +78,7 @@ void SkyDataLoader::calcMessagesFromToIdASC(int from, int to) {
     }
 
     const int step = 500;
-    for (int i = 0; i <= to; i+=step) {
+    for (int i = from; i <= to; i+=step) {
         QString expr = QString("OID > %1 AND OID <= %2").arg(i).arg(std::min(i + step, to));
         auto ds = select<Messages>(*m_db, RawExpr(expr.toLocal8Bit().data())).orderBy(Messages::Timestamp, true);
         for (Messages message: ds.all()) {
@@ -105,12 +105,11 @@ void SkyDataLoader::calcMessagesFromToIdASC(int from, int to) {
             m["Author"] = QString::fromStdString(message.author);
             m["Chatname"] = chats_hash.value(QString::fromStdString(message.chatname));
 
+            QVariantMap m_finished;
+            m_finished["maxId"] = QString::fromStdString(message.id);
             Q_EMIT prepend_msg(m);
         }
     }
-    QVariantMap m_finished;
-    m_finished["maxId"] = from;
-    emit send_finished(m_finished);
 }
 
 void SkyDataLoader::allMessages(const QVariantMap &) {
@@ -153,7 +152,7 @@ void SkyDataLoader::processNewMsg(const QVariantMap &msg) {
         return;
     }
     qDebug() << "Maybe really new msg";
-    calcMessagesFromToIdASC(maxIdDb, maxId);
+    calcMessagesFromToIdASC(maxId, maxIdDb);
     QVariantMap m;
     m["max_id"] = maxIdDb;
  }
