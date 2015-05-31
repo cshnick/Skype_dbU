@@ -9,6 +9,20 @@
 
 class SkyModel;
 
+template <class T> class VPtr
+{
+public:
+    static T* asPtr(QVariant v)
+    {
+    return  (T *) v.value<void *>();
+    }
+
+    static QVariant asQVariant(T* ptr)
+    {
+    return qVariantFromValue((void *) ptr);
+    }
+};
+
 namespace SkypeDB {
 class main;
 }
@@ -20,9 +34,8 @@ class SkyDataLoader : public QObject
 public:
     SkyDataLoader();
 
-    Q_SLOT void process_msg(const QVariantMap &msg);
-    Q_SLOT void processNewMsg(const QVariantMap &msg);
-    Q_SIGNAL void send_msg(const QVariantMap &msg);
+    Q_SLOT void loadFromScratch(const QVariantMap &msg);
+    Q_SIGNAL void send_row(const QVariantMap &msg);
     Q_SIGNAL void prepend_msg(const QVariantMap &msg);
     Q_SIGNAL void send_finished(const QVariantMap &msg);
     Q_SIGNAL void can_start_watcher();
@@ -31,12 +44,11 @@ private:
     void allMessages(const QVariantMap &msg);
     void chatMessages(const QVariantMap &msg);
     void MessagesDataSources(const QVariantMap &msg);
-    void calcMessagesFromToIdDESC(int from, int to);
-    void calcMessagesFromToIdASC(int from, int to);
+    void calcMessagesFromToIdDESC(int from, int to, SkypeDB::main *db);
+
 
 private:
     int m_state = 0; //0 - idle; 1 - running
-    std::unique_ptr<SkypeDB::main> m_db;
 };
 
 class SkyProxyModel : public QSortFilterProxyModel
@@ -66,8 +78,7 @@ public:
     Q_SIGNAL void instigateLoad(const QVariantMap &msg);
     Q_SIGNAL void loadProgressChanged();
     Q_SIGNAL void loadFinished();
-    Q_SIGNAL void checkNewMessages(const QVariantMap &msg);
-    Q_SLOT void handleLoadedData(const QVariantMap &msg);
+    Q_SLOT void handleLoadedRow(const QVariantMap &msg);
     Q_SLOT void handlePrependMsg(const QVariantMap &msg);
     Q_SLOT void startWatcher();
     Q_SLOT void processChangedFile(const QString &fileName);
@@ -78,6 +89,9 @@ protected:
     bool lessThan(const QModelIndex &left, const QModelIndex &right) const;
 
 private:
+    void prependNewMesages();
+
+private:
     SkyModel *model_impl() {
         return reinterpret_cast<SkyModel*> (this->sourceModel());
     }
@@ -85,8 +99,9 @@ private:
         return reinterpret_cast<SkyModel*> (this->sourceModel());
     }
     QThread m_worker;
-    QMutex m_mutex;
     QFileSystemWatcher m_watcher;
+    QMutex m_mutex;
+    std::unique_ptr<SkypeDB::main> m_db;
     int m_progress = 0;
     int m_maxId = -1;
 };
