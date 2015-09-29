@@ -12,7 +12,7 @@
 using namespace litesql;
 using namespace SkypeDB;
 
-QString SkyProxyModel::s_dbPath = "/home/ilia/.Skype/luxa_ryabic/main.db";
+QString SkyProxyModel::s_dbPath = "/home/ilia/.Skype/sc.ryabokon.ilia/main.db";
 
 SkyDataLoader::SkyDataLoader()
 {
@@ -20,6 +20,72 @@ SkyDataLoader::SkyDataLoader()
 
 void SkyDataLoader::loadFromScratch(const QVariantMap &msg){
     allMessages(msg);
+}
+
+typedef QHash<QString, QString> string_hash;
+QVariantMap fromMessage(const Messages &message, const string_hash &contacts_hash, const string_hash &chats_hash) {
+    QString body = QString::fromStdString(message.body_xml);
+    QTextDocument doc(body);
+    QFont fnt = doc.defaultFont();
+    fnt.setPointSize(10);
+    doc.setDefaultFont(fnt);
+    doc.adjustSize();
+    QFontMetrics metrx(fnt);
+    int ofs = metrx.boundingRect("H").height();
+
+    QVariantMap m;
+    m["Name"] = doc.toPlainText();
+    m["Height"] = doc.size().height() + ofs;
+    m["Timestamp"] = QDateTime::fromTime_t(message.timestamp).toString();
+    m["Author"] = contacts_hash.value(QString::fromStdString(message.author));
+    m["Chatname"] = chats_hash.value(QString::fromStdString(message.chatname));
+
+    return m;
+}
+
+int calcPercent(int cnt, int i) {
+    int offset = 9;
+    double status_move = (cnt - i) << offset;
+    double percentage = status_move / cnt;
+    int status_res = static_cast<int>(percentage * 100) >> offset;
+
+    return status_res;
+}
+
+void SkyDataLoader::alternativeLoad(int from, int to, SkypeDB::main *db) {
+    qDebug() << "Calc chats, start";
+    auto time = QTime::currentTime();
+    string_hash chats_hash, contacts_hash;
+    auto contacts_cursor = select<Contacts>(*db).cursor();
+    for (;contacts_cursor.rowsLeft();contacts_cursor++) {
+        Contacts ctc = *contacts_cursor;
+        contacts_hash[QString::fromStdString(ctc.skypename)] = QString::fromStdString(ctc.fullname);
+    }
+    time = QTime::currentTime();
+    auto chats = select<Chats>(*db).orderBy(Chats::Activity_timestamp, false).all();
+    auto cnt = chats.size();
+    auto i = cnt;
+    int percent = 0;
+    int cut = 20;
+    for (Chats ch: chats) {
+        chats_hash[QString::fromStdString(ch.name)] = QString::fromStdString(ch.friendlyname);
+        auto messages = select<Messages>(*db, Messages::Chatname == ch.name).orderBy(Messages::Timestamp, false).all();
+        for (Messages message: messages) {
+            QVariantMap m(fromMessage(message, contacts_hash, chats_hash));
+            m["Percent"] = calcPercent(cnt, i);
+            percent = m.value("Percent").toInt();
+            emit send_row(m);
+        }
+        qDebug() << "Reporting:" << percent << "%" << QString::fromStdString(ch.friendlyname) << messages.size();
+        --i;
+        if (!--cut) {
+            break;
+        }
+    }
+    qDebug() << "Calc chats, finish, msecs elapsed:" << time.msecsTo(QTime::currentTime());
+    QVariantMap m_finished;
+    m_finished["maxId"] = from;
+    emit send_finished(m_finished);
 }
 
 void SkyDataLoader::calcMessagesFromToIdDESC(int from, int to, SkypeDB::main *db) {
@@ -74,7 +140,8 @@ void SkyDataLoader::allMessages(const QVariantMap &messg) {
         q.result("max(id)");
         q.source(SkypeDB::Messages::table__);
         int count = atoi(db->query(q)[0][0]);
-        calcMessagesFromToIdDESC(count, 0, db);
+//        calcMessagesFromToIdDESC(count, 0, db);
+        alternativeLoad(count, 0, db);
         Q_EMIT can_start_watcher();
     } catch (Except e) {
         std::cerr << "Error: " << e << std::endl;
@@ -94,6 +161,7 @@ void SkyDataLoader::MessagesDataSources(const QVariantMap &) {
 
 SkyProxyModel::SkyProxyModel(QObject *parent)
     :QSortFilterProxyModel(parent)
+    , m_maxId(-1)
 {
     setSourceModel(new SkyModel);
 //    sort(0);
@@ -192,7 +260,7 @@ void SkyProxyModel::handleLoadedRow(const QVariantMap &msg) {
 
 void SkyProxyModel::handlePrependMsg(const QVariantMap &msg) {
     int newIndex = msg.value("maxId").toInt();
-    __sync_lock_test_and_set(&m_maxId, newIndex);
+    m_maxId = newIndex;
     model_impl()->insert(0, msg);
 }
 

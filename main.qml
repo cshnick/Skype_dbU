@@ -40,8 +40,8 @@ ApplicationWindow {
 
         onEditingFinished: {
             console.log("search_field editing finished")
+            sky_list.filter(search_field.text)
         }
-
     }
 
     ProgressBarCustom {
@@ -63,7 +63,9 @@ ApplicationWindow {
     SkyList {
         id: sky_list
         function text_changed(text) {
-            filter(text)
+            if (text.length > 2) {
+                filter(text)
+            }
         }
 
         anchors.fill: undefined

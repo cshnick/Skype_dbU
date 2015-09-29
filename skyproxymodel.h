@@ -6,6 +6,7 @@
 #include <QThread>
 #include <QMutex>
 #include "main.hpp"
+#include <atomic>
 
 class SkyModel;
 
@@ -45,6 +46,7 @@ private:
     void chatMessages(const QVariantMap &msg);
     void MessagesDataSources(const QVariantMap &msg);
     void calcMessagesFromToIdDESC(int from, int to, SkypeDB::main *db);
+    void alternativeLoad(int from, int to, SkypeDB::main *db);
 
 
 private:
@@ -103,7 +105,7 @@ private:
     QMutex m_mutex;
     std::unique_ptr<SkypeDB::main> m_db;
     int m_progress = 0;
-    int m_maxId = -1;
+    std::atomic_int m_maxId;
 };
 
 #endif // SKYPROXYMODEL_H

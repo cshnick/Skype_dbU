@@ -38,6 +38,7 @@ int main(int argc, char *argv[])
             QAction *quitAction = new QAction(QObject::tr("&Quit"), root);
             root->connect(quitAction, SIGNAL(triggered()), qApp, SLOT(quit()));
 
+
             QMenu *trayIconMenu = new QMenu();
             trayIconMenu->addAction(minimizeAction);
             trayIconMenu->addAction(maximizeAction);
@@ -46,6 +47,7 @@ int main(int argc, char *argv[])
             trayIconMenu->addAction(quitAction);
 
             QSystemTrayIcon *trayIcon = new QSystemTrayIcon(root);
+            root->connect(trayIcon, SIGNAL(activated(QSystemTrayIcon::ActivationReason)), root, SLOT(showNormal()));
             trayIcon->setContextMenu(trayIconMenu);
             trayIcon->setIcon(QIcon(":logoskype.svg"));
             trayIcon->show();
